@@ -77,9 +77,7 @@ func migrate(db *sql.DB, name string) error {
 
 func main() {
 	kingpin.Parse()
-	fmt.Println(*dir, *host, *user, *password)
 
-	// docker run --rm=true -p 5432:5432 postgres:9.4
 	db, err := sql.Open("postgres", fmt.Sprintf(
 		"user=%v password=%v dbname=%v host=%v port=%v sslmode=%v",
 		*user, *password, *dbname, *host, *port, *sslmode,
@@ -141,5 +139,4 @@ func main() {
 		}
 	}
 
-	fmt.Println(migrations)
 }
