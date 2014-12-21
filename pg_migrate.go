@@ -23,7 +23,8 @@ var (
 	user     = kingpin.Flag("user", "User").Default("postgres").String()
 	password = kingpin.Flag("password", "Password").String()
 	sslmode  = kingpin.Flag("sslmode", "").Default("disable").String()
-	verbose  = kingpin.Flag("verbose", "Verbose output").Default("false").Bool()
+	history  = kingpin.Flag("history", "Show migration history").Bool()
+	verbose  = kingpin.Flag("verbose", "Verbose output").Bool()
 )
 
 func createMigrationTable(db *sql.DB) error {
@@ -75,15 +76,54 @@ func migrate(db *sql.DB, name string) error {
 	return nil
 }
 
+func migrationHistory(db *sql.DB) {
+	res, err := db.Query("SELECT name, time from migrations ORDER BY time DESC")
+	if err != nil {
+		panic(err)
+	}
+
+	names := []string{}
+	times := []time.Time{}
+
+	longestName := 13
+	for res.Next() {
+		var n string
+		var t time.Time
+		err := res.Scan(&n, &t)
+		if err != nil {
+			panic(err)
+		}
+
+		if len(n) > longestName {
+			longestName = len(n)
+		}
+
+		names = append(names, n)
+		times = append(times, t)
+	}
+
+	header := fmt.Sprintf("\no- Migration name %v--- Time ------------------o", strings.Repeat("-", longestName-14))
+	fmt.Println(header)
+	for i, name := range names {
+		fmt.Printf("|  %v%v  |  %v  |\n", name, strings.Repeat(" ", longestName-len(name)), times[i].Format(time.RFC822))
+	}
+	fmt.Printf("o%vo\n\n", strings.Repeat("-", len(header)-3))
+}
+
 func main() {
 	kingpin.Parse()
 
 	db, err := sql.Open("postgres", fmt.Sprintf(
-		"user=%v password=%v dbname=%v host=%v port=%v sslmode=%v",
+		"user='%v' password='%v' dbname='%v' host='%v' port='%v' sslmode='%v'",
 		*user, *password, *dbname, *host, *port, *sslmode,
 	))
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if *history {
+		migrationHistory(db)
+		return
 	}
 
 	createMigrationTable(db)

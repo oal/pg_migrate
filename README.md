@@ -22,5 +22,6 @@ Flags:
   --user="postgres"    User
   --password=PASSWORD  Password
   --sslmode="disable"
+  --history            Show migration history
   --verbose            Verbose output
 ```
