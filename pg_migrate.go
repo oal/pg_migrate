@@ -6,7 +6,6 @@ import (
 	_ "github.com/lib/pq"
 	"gopkg.in/alecthomas/kingpin.v1"
 	"io/ioutil"
-	"log"
 	"os"
 	"sort"
 	"strconv"
@@ -76,10 +75,10 @@ func migrate(db *sql.DB, name string) error {
 	return nil
 }
 
-func migrationHistory(db *sql.DB) {
+func migrationHistory(db *sql.DB) error {
 	res, err := db.Query("SELECT name, time from migrations ORDER BY time DESC")
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	names := []string{}
@@ -91,7 +90,7 @@ func migrationHistory(db *sql.DB) {
 		var t time.Time
 		err := res.Scan(&n, &t)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		if len(n) > longestName {
@@ -108,6 +107,8 @@ func migrationHistory(db *sql.DB) {
 		fmt.Printf("|  %v%v  |  %v  |\n", name, strings.Repeat(" ", longestName-len(name)), times[i].Format(time.RFC822))
 	}
 	fmt.Printf("o%vo\n\n", strings.Repeat("-", len(header)-3))
+
+	return nil
 }
 
 func main() {
@@ -118,11 +119,17 @@ func main() {
 		*user, *password, *dbname, *host, *port, *sslmode,
 	))
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		kingpin.Usage()
+		return
 	}
 
 	if *history {
-		migrationHistory(db)
+		err := migrationHistory(db)
+		if err != nil {
+			fmt.Println(err)
+			kingpin.Usage()
+		}
 		return
 	}
 
@@ -130,13 +137,18 @@ func main() {
 
 	name, migrationTime, err := findLatestMigration(db)
 	if err != nil && err.Error() != "sql: no rows in result set" {
-		panic(err)
+		fmt.Println(err)
+		kingpin.Usage()
+		return
 	}
-	log.Printf("Latest migration: %v (migrated %v)\n", name, migrationTime)
+
+	fmt.Printf("Latest migration: %v (migrated %v)\n", name, migrationTime.Format(time.RFC822))
 
 	files, err := ioutil.ReadDir(*dir)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		kingpin.Usage()
+		return
 	}
 
 	existing := strings.SplitN(name, "-", 2)[0]
@@ -152,7 +164,7 @@ func main() {
 		migration := strings.SplitN(name, "-", 2)[0]
 		migrationNum, err := strconv.ParseInt(migration, 10, 64)
 		if err != nil {
-			panic(err)
+			fmt.Printf("Invalid migration file name: \"%v\". Migration files must have names like [number]-[description].sql", name)
 		}
 
 		if migrationNum <= existingNum {
@@ -164,7 +176,7 @@ func main() {
 	}
 
 	if len(migrations) == 0 {
-		panic("No migrations found")
+		fmt.Printf("No new migrations found in \"%v\".\n", *dir)
 	}
 
 	sort.Strings(migrations)
@@ -175,7 +187,7 @@ func main() {
 			panic(err)
 		}
 		if *verbose {
-			log.Printf("Migration %v successfully applied", migration)
+			fmt.Printf("Migration \"%v\" successfully applied.\n", migration)
 		}
 	}
 
