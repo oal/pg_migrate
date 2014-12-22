@@ -7,6 +7,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v1"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,7 +63,7 @@ func migrate(db *sql.DB, name string) error {
 
 	sql := fmt.Sprintf("BEGIN;\n%v\nCOMMIT;\n", string(data))
 	if *verbose {
-		fmt.Println(sql)
+		fmt.Println(pygmentize(sql))
 	}
 
 	_, err = db.Exec(sql)
@@ -111,6 +112,24 @@ func migrationHistory(db *sql.DB) error {
 	return nil
 }
 
+// Run through pygmentize if available, otherwise, just return what was inputted.
+func pygmentize(data string) string {
+	cmd := exec.Command("pygmentize", "-f", "console256", "-l", "sql")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return data
+	}
+
+	stdin.Write([]byte(data))
+	stdin.Close()
+
+	highlighted, err := cmd.CombinedOutput()
+	if err != nil {
+		return data
+	}
+	return string(highlighted)
+}
+
 func main() {
 	kingpin.Parse()
 
@@ -140,9 +159,11 @@ func main() {
 		fmt.Println(err)
 		kingpin.Usage()
 		return
+	} else if err != nil {
+		fmt.Printf("Latest migration: %v (migrated %v)\n", name, migrationTime.Format(time.RFC822))
+	} else {
+		fmt.Println("No migrations applied yet.")
 	}
-
-	fmt.Printf("Latest migration: %v (migrated %v)\n", name, migrationTime.Format(time.RFC822))
 
 	files, err := ioutil.ReadDir(*dir)
 	if err != nil {
@@ -172,7 +193,6 @@ func main() {
 		}
 
 		migrations = append(migrations, file.Name())
-		fmt.Println(file.Name())
 	}
 
 	if len(migrations) == 0 {
